@@ -22,6 +22,38 @@ namespace eval ::SafetyFactor {
     variable LIB_DIR     [file dirname [file normalize [info script]]]
 }
 
+# Print the model's REAL selection-set table (IDs from GetSelectionSetList —
+# they are NOT guaranteed to be 1..N; GetSelectionSetHandle silently returns
+# an EMPTY set for a nonexistent ID, which is exactly how the "no data
+# returned" bug happened). Returns a dict-ish list {id label id label ...}.
+proc ::SafetyFactor::ListSets {} {
+    set out {}
+    catch {
+        foreach sid [model GetSelectionSetList] {
+            model GetSelectionSetHandle _sfls $sid
+            set lbl [_sfls GetLabel]
+            set sz  ""
+            catch {set sz [_sfls GetSize]}
+            _sfls ReleaseHandle
+            puts "    set id $sid -> '$lbl' (size $sz)"
+            lappend out $sid $lbl
+        }
+    }
+    return $out
+}
+
+# Resolve user input (a real ID or a set NAME like "Pos3") against the
+# model's actual selection-set list. Returns the real ID, or "" if no match.
+proc ::SafetyFactor::ResolveSet {input setTable} {
+    foreach {sid lbl} $setTable {
+        if {$sid eq $input} { return $sid }
+    }
+    foreach {sid lbl} $setTable {
+        if {[string equal -nocase $lbl $input]} { return $sid }
+    }
+    return ""
+}
+
 proc ::SafetyFactor::CleanHandles {} {
     foreach handle {sess proj object page win clt model rctrl sub con leg iso math query vw se sys mea mtmp setc mfont note ntmp nfont iter} {
         catch {${handle} ReleaseHandle}
@@ -133,21 +165,28 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
     query SetDataSourceProperty result datatype real
     query SetDataSourceProperty result layer all
 
+    # Real selection-set table for THIS window's model — user input is
+    # resolved against it (by real ID or by name), never trusted blindly.
+    puts "  Selection sets in this model:"
+    set setTable [ListSets]
+
     # Primer pass — the original script always ran one WriteData before the
     # per-set loop; keep it in case that's what materializes the query.
     catch {
-        query SetSelectionSet [lindex $selectionSets 0]
+        query SetSelectionSet [lindex $setTable 0]
         query SetQuery "node.id contour.value"
         set _primer [file join $::SafetyFactor::LIB_DIR "_sf_primer_tmp.csv"]
         query WriteData $_primer csv
         file delete -force $_primer
     }
 
-    foreach setID $selectionSets {
-        if {[catch {model GetSelectionSetHandle setc $setID} err]} {
-            puts "  skip set $setID: not in this window's model ($err)"
+    foreach setInput $selectionSets {
+        set setID [ResolveSet $setInput $setTable]
+        if {$setID eq ""} {
+            puts "  skip '$setInput': no selection set with that ID or name in this model (see table above)"
             continue
         }
+        model GetSelectionSetHandle setc $setID
         set setName [setc GetLabel]
         setc ReleaseHandle
 
@@ -244,11 +283,14 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
     puts ""
     puts "===== Window $winIdx ====="
 
-    # Resolve set ID -> set name (CSV stores names, not IDs)
-    if {[catch {model GetSelectionSetHandle setc $setID} err]} {
-        puts "  skip: this window's model has no selection set $setID ($err)"
+    # Resolve input (real ID or name) against the model's actual set list
+    set setTable [ListSets]
+    set realID [ResolveSet $setID $setTable]
+    if {$realID eq ""} {
+        puts "  skip: no selection set with ID or name '$setID' in this model"
         return
     }
+    model GetSelectionSetHandle setc $realID
     set setName [setc GetLabel]
     setc ReleaseHandle
 
