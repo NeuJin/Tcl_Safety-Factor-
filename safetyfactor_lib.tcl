@@ -11,8 +11,12 @@ namespace eval ::SafetyFactor {
     variable PINK        "252 62 255"      ;# marker color (GUI read-back)
     variable MEA_FSIZE   15                ;# measure marker text size
     variable NOTE_FSIZE  10                ;# summary note text size
-    variable DATATYPE    "1. Endure_SF_A"  ;# contour data type label
-    variable QUERY_TYPE  "1.  Endure_SF_A" ;# query "Result Type" (two spaces — as in the original, verified working)
+    variable DATATYPE    "1. Endure_SF_A"  ;# contour/query data type label —
+                                            # MUST match the loaded result file
+                                            # (AVL EXCITE: "1. Endure_SF_A";
+                                            # FEMFAT etc.: run once and copy the
+                                            # exact label from the console's
+                                            # "Available data types" listing)
     variable SUBCASE     1                 ;# load case holding the SF result
     variable SIMULATION  0                 ;# simulation step index
     variable LIB_DIR     [file dirname [file normalize [info script]]]
@@ -33,6 +37,10 @@ proc ::SafetyFactor::OpenChain {} {
 }
 
 # Sets the SF contour + current frame on the already-grabbed window handles.
+# HyperView SILENTLY ignores an unknown data-type label (no error, contour
+# just stays grey) — so read the label back and, on mismatch, print the
+# file's real data-type list so the correct spelling can be copied into
+# ::SafetyFactor::DATATYPE (panel Options → "Data type").
 proc ::SafetyFactor::SetupContour {} {
     variable DATATYPE
     variable SUBCASE
@@ -41,14 +49,31 @@ proc ::SafetyFactor::SetupContour {} {
     rctrl GetContourCtrlHandle con
     con GetLegendHandle leg
 
+    rctrl SetCurrentSubcase $SUBCASE
+    rctrl SetCurrentSimulation $SIMULATION
+
     con SetDataType $DATATYPE
+    set applied ""
+    catch {set applied [con GetDataType]}
+    if {$applied ne $DATATYPE} {
+        puts "  !!!! Data type '$DATATYPE' was NOT accepted (readback: '$applied')"
+        set dtList ""
+        if {[catch {set dtList [rctrl GetDataTypeList [rctrl GetCurrentSubcase]]}]} {
+            catch {set dtList [rctrl GetDataTypeList]}
+        }
+        if {$dtList ne ""} {
+            puts "  Available data types in this file:"
+            foreach dt $dtList { puts "      '$dt'" }
+            puts "  -> copy the exact label into the panel's 'Data type' field and re-run."
+        }
+        error "invalid data type label '$DATATYPE'"
+    }
+
     con SetDataComponent {Scalar value}
     con SetAverageMode none
     con SetCornerDataEnabled false
     con SetEnableState true
     leg SetNumericPrecision 5
-    rctrl SetCurrentSubcase $SUBCASE
-    rctrl SetCurrentSimulation $SIMULATION
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -56,7 +81,7 @@ proc ::SafetyFactor::SetupContour {} {
 # ─────────────────────────────────────────────────────────────────────
 
 proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsVar} {
-    variable QUERY_TYPE
+    variable DATATYPE
     variable SUBCASE
     variable SIMULATION
     upvar 1 $summaryRowsVar summaryRows
@@ -83,7 +108,10 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
 
     query SetDataSourceProperty result "Simulation Step" $SIMULATION
     query SetDataSourceProperty result "Model ID" 1
-    query SetDataSourceProperty result "Result Type" $QUERY_TYPE
+    # NB: the original AVL-era script passed "1.  Endure_SF_A" (two spaces)
+    # here while the contour used one space. If the contour applies but the
+    # query returns no rows on an AVL file, re-check that spacing quirk.
+    query SetDataSourceProperty result "Result Type" $DATATYPE
     query SetDataSourceProperty result "Load Case" $SUBCASE
     query SetDataSourceProperty result complex real
     query SetDataSourceProperty result complex_format real
