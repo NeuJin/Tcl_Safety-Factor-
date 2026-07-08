@@ -14,32 +14,59 @@ Manually switching to each nodeset, running a query, reading the minimum SF valu
 
 ## What it does
 
-- Takes a list of Selection Set IDs as input
-- Queries `Endure_SF_A` (Safety Factor) on each nodeset
-- Finds minimum SF value and corresponding Node ID per set
-- Exports summary CSV
+- **Loops over every window on the active page** (multi-window layouts supported)
+- Queries `Endure_SF_A` (Safety Factor) on each nodeset — single load case,
+  no frame sweep needed
+- Finds minimum SF value and corresponding Node ID per set, per window
+- Exports one clean summary CSV
+- **Annotate step**: per window, marks the min-SF node (pink ID marker,
+  size 15) + a screen-anchored summary note (node ID + min SF, size 10)
 
 ```
-Input:  Selection Set IDs (space-separated, entered at runtime)
-Output: SafetyFactor_Summary_LoadCase1.csv
-        SF_Results_Get_ID.csv
+Input:  Selection Set IDs (space-separated)
+Output: SafetyFactor_Summary.csv  (one row per window × nodeset —
+         WindowID, SetName, MinNodeID, MinSafetyFactor, LoadCaseLabel)
 ```
 
 ---
 
 ## How to run
 
+### Option A — button panel (recommended)
+
+```tcl
+source /path/to/SafetyFactor_Panel.tcl
+```
+A floating **Safety Factor Tools** panel opens with Export / Annotate
+buttons and options (marker/note size, color, load case, data type label).
+Auto-open at startup:
+```
+hw.exe <model_or_session> -tcl /path/to/SafetyFactor_Panel.tcl
+```
+
+### Option B — console scripts
+
 1. Open HyperView with your simulation result loaded.
 2. Open the Tcl console: `View → Command Window`.
 3. Source the script:
    ```tcl
-   source /path/to/Conrod_SF_Find_NodeSet.tcl
+   source /path/to/Conrod_SF_Find_NodeSet.tcl   ;# min-SF query → CSV
+   source /path/to/TCL_SFAnnotate.tcl           ;# markers + notes from CSV
    ```
 4. Enter Selection Set IDs when prompted (space-separated):
    ```
    => Enter selection set IDs: 1 2 3 4 5 6 7 8
    ```
 5. Results export automatically to the script directory.
+
+### File layout
+
+| File | Role |
+|------|------|
+| `safetyfactor_lib.tcl` | All logic (procs, no UI) — sourced by everything below |
+| `SafetyFactor_Panel.tcl` | Floating button panel (add-in style) |
+| `Conrod_SF_Find_NodeSet.tcl` | Console wrapper: prompt → `::SafetyFactor::RunExport` |
+| `TCL_SFAnnotate.tcl` | Console wrapper: prompt → `::SafetyFactor::RunAnnotate` |
 
 ---
 

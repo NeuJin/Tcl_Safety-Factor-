@@ -1,4 +1,4 @@
-puts "---Min Safety Factor Evaluation---"
+puts "---Min Safety Factor Annotation---"
 puts "########  BY NGUYEN TAN LOC  ########"
 puts ""
 
@@ -6,11 +6,8 @@ puts ""
 # For the button-panel version, source SafetyFactor_Panel.tcl instead.
 source [file join [file dirname [file normalize [info script]]] safetyfactor_lib.tcl]
 
-puts -nonewline "=> Enter selection set IDs (space-separated): "
+puts -nonewline "=> Enter ONE selection set ID to annotate: "
 update idletasks
 gets stdin userInput
-set selectionSets [split [string trim $userInput]]
 
-::SafetyFactor::RunExport $selectionSets
-
-puts "################  Process completed.  ################"
+::SafetyFactor::RunAnnotate $userInput
