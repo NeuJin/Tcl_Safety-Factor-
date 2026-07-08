@@ -304,6 +304,76 @@ proc ::SafetyFactor::RunExport {selectionSets {outputDir ""}} {
 }
 
 # ─────────────────────────────────────────────────────────────────────
+# RE-QUERY — SF value for ONE node in ONE window (used by the panel's
+# editable results table). Returns the contour value at that node on
+# SUBCASE/SIMULATION.
+# ─────────────────────────────────────────────────────────────────────
+
+proc ::SafetyFactor::QueryNodeValue {winIdx nodeID} {
+    variable SUBCASE
+    variable SIMULATION
+
+    CleanHandles
+    OpenChain
+
+    catch {page SetActiveWindow $winIdx}
+    page GetWindowHandle win $winIdx
+    win GetClientHandle clt
+    set modelID [clt GetActiveModel]
+    clt GetModelHandle model $modelID
+    model GetResultCtrlHandle rctrl
+    model GetQueryCtrlHandle query
+
+    # Applies + resolves the datatype label (sets RESOLVED_DT)
+    SetupContour
+    variable RESOLVED_DT
+
+    # Temp single-node selection set (query needs a set)
+    set tid [model AddSelectionSet node]
+    model GetSelectionSetHandle _ts $tid
+    _ts Add "id == $nodeID"
+    set sz 0
+    catch {set sz [_ts GetSize]}
+    _ts ReleaseHandle
+    if {$sz == 0} {
+        catch {model RemoveSelectionSet $tid}
+        catch {hwi CloseStack}
+        error "node $nodeID not found in window $winIdx's model"
+    }
+
+    query SetDataSourceProperty result "Simulation Step" $SIMULATION
+    query SetDataSourceProperty result "Model ID" $modelID
+    query SetDataSourceProperty result "Result Type" $RESOLVED_DT
+    query SetDataSourceProperty result "Load Case" $SUBCASE
+    query SetDataSourceProperty result complex real
+    query SetDataSourceProperty result complex_format real
+    query SetDataSourceProperty result mutiline true
+    query SetDataSourceProperty result dataformat csv
+    query SetDataSourceProperty result datatype real
+    query SetDataSourceProperty result layer all
+    query SetSelectionSet $tid
+    query SetQuery "node.id contour.value"
+    query GetQuery
+
+    set val ""
+    query GetIteratorHandle iter
+    for {iter First} {[iter Valid]} {iter Next} {
+        set data [iter GetDataList]
+        if {[lindex $data 1] ne ""} { set val [lindex $data 1] }
+    }
+    iter ReleaseHandle
+    catch {model RemoveSelectionSet $tid}
+
+    if {$val eq ""} {
+        catch {hwi CloseStack}
+        error "no contour value returned for node $nodeID (window $winIdx)"
+    }
+
+    catch {hwi CloseStack}
+    return $val
+}
+
+# ─────────────────────────────────────────────────────────────────────
 # ANNOTATE — per-window measure marker + summary note from the CSV
 # ─────────────────────────────────────────────────────────────────────
 
