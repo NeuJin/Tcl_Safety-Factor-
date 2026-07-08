@@ -105,6 +105,19 @@ proc ::SafetyFactor::SetupContour {} {
     con SetCornerDataEnabled false
     con SetEnableState true
     leg SetNumericPrecision 5
+
+    # Materialize the contour — SetEnableState alone is NOT enough: without
+    # the animator step-refresh + display options the model stays grey and
+    # contour.value queries return 0 rows (recipe confirmed in the HW14
+    # library §3 / prcApplyContour).
+    catch {
+        page GetAnimatorHandle _anim
+        _anim SetCurrentStep [_anim GetCurrentStep]
+        _anim ReleaseHandle
+    }
+    catch {clt SetDisplayOptions "contour" true}
+    catch {clt SetDisplayOptions "legend"  true}
+    clt Draw
 }
 
 # ─────────────────────────────────────────────────────────────────────

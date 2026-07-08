@@ -4,7 +4,8 @@
 # Then copy the FULL console output back for analysis.
 
 set DT      "1. Endure_SF_A"
-set SETID   1
+set SETID   ""    ;# auto-picked: first NON-EMPTY set (previous run used the
+                   ;# empty set id 1, contaminating sections 7-9)
 set SUBCASE 1
 set SIM     0
 
@@ -60,7 +61,17 @@ con SetAverageMode none
 con SetCornerDataEnabled false
 con SetEnableState true
 puts "enable state        : [con GetEnableState]"
+# Full apply recipe (animator refresh + display options) — without this the
+# contour may never materialize and binding stays 'null':
+catch {
+    page GetAnimatorHandle _anim
+    _anim SetCurrentStep [_anim GetCurrentStep]
+    _anim ReleaseHandle
+}
+catch {clt SetDisplayOptions "contour" true}
+catch {clt SetDisplayOptions "legend"  true}
 clt Draw
+catch {puts "binding AFTER apply : '[con GetBinding]'"}
 puts "(check the window NOW — is the contour colored?)"
 
 puts "\n--- 5. QUERY SETUP ---"
@@ -77,15 +88,27 @@ foreach {p v} [list "Simulation Step" $SIM "Model ID" $modelID "Result Type" $DT
     puts "  prop '$p' set '$v' -> readback '$rb'"
 }
 
-puts "\n--- 6. SELECTION SET $SETID ---"
-if {[catch {model GetSelectionSetHandle setc $SETID} e]} {
-    puts "GetSelectionSetHandle FAILED: $e"
-} else {
-    puts "label               : '[setc GetLabel]'"
-    catch {puts "size                : [setc GetSize]"}
-    setc ReleaseHandle
+puts "\n--- 6. SELECTION SETS (real table) ---"
+set pickID "" ; set pickLabel ""
+catch {
+    foreach sid [model GetSelectionSetList] {
+        model GetSelectionSetHandle _s $sid
+        set lbl [_s GetLabel] ; set sz ""
+        catch {set sz [_s GetSize]}
+        _s ReleaseHandle
+        puts "  set id $sid -> '$lbl' (size $sz)"
+        if {$pickID eq "" && $sz ne "" && $sz > 0 && $lbl ne "ALL_MASSIVE_ELEMENTS"} {
+            set pickID $sid ; set pickLabel $lbl
+        }
+    }
 }
-query SetSelectionSet $SETID
+if {$SETID ne ""} { set pickID $SETID }
+if {$pickID eq ""} {
+    puts "!! no non-empty set found — aborting query sections"
+    return
+}
+puts "using set           : id $pickID ('$pickLabel')"
+query SetSelectionSet $pickID
 catch {puts "query sel set size  : [query GetSelectionSetSize]"}
 
 proc _countRows {} {
