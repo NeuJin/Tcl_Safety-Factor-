@@ -19,6 +19,7 @@ namespace eval ::SafetyFactor {
                                             # "Available data types" listing)
     variable SUBCASE     1                 ;# load case holding the SF result
     variable SIMULATION  0                 ;# simulation step index
+    variable RESOLVED_DT ""                ;# DATATYPE resolved to the file's exact label (set by SetupContour)
     variable LIB_DIR     [file dirname [file normalize [info script]]]
 }
 
@@ -81,24 +82,40 @@ proc ::SafetyFactor::SetupContour {} {
     rctrl GetContourCtrlHandle con
     con GetLegendHandle leg
 
+    variable RESOLVED_DT
+
     rctrl SetCurrentSubcase $SUBCASE
     rctrl SetCurrentSimulation $SIMULATION
 
-    con SetDataType $DATATYPE
-    set applied ""
-    catch {set applied [con GetDataType]}
-    if {$applied ne $DATATYPE} {
-        # Warning only — readback formatting can differ from the input label
-        # even when the type applied fine, so this must not abort the window.
-        puts "  NOTE: data type readback '$applied' != input '$DATATYPE'"
-        set dtList ""
-        if {[catch {set dtList [rctrl GetDataTypeList [rctrl GetCurrentSubcase]]}]} {
-            catch {set dtList [rctrl GetDataTypeList]}
-        }
-        if {$dtList ne ""} {
-            puts "  Available data types: $dtList"
+    # ★ Resolve DATATYPE against the file's ACTUAL data-type list. The real
+    # labels carry internal padding (e.g. "1.  Endure_SF_A" with TWO spaces,
+    # "1.       1/SF_A" — names are column-aligned after the "N." prefix).
+    # A one-space lookalike is accepted silently AND GetDataType even echoes
+    # it back — but it binds NO data (binding stays 'null', contour grey,
+    # contour.value queries return 0 rows). Read-back equality proves
+    # nothing here; only a whitespace-normalized match against
+    # GetDataTypeList finds the file's true label.
+    set dtList ""
+    if {[catch {set dtList [rctrl GetDataTypeList [rctrl GetCurrentSubcase]]}]} {
+        catch {set dtList [rctrl GetDataTypeList]}
+    }
+    set RESOLVED_DT $DATATYPE
+    set normIn [string tolower [string trim [regsub -all {\s+} $DATATYPE " "]]]
+    set found 0
+    foreach dt $dtList {
+        set norm [string tolower [string trim [regsub -all {\s+} $dt " "]]]
+        if {$norm eq $normIn} {
+            set RESOLVED_DT $dt
+            set found 1
+            break
         }
     }
+    if {!$found && $dtList ne ""} {
+        puts "  WARNING: '$DATATYPE' has no normalized match in the data-type list:"
+        foreach dt $dtList { puts "      '$dt'" }
+    }
+    puts "  data type resolved: '$RESOLVED_DT'"
+    con SetDataType $RESOLVED_DT
 
     con SetDataComponent {Scalar value}
     con SetAverageMode none
@@ -118,6 +135,14 @@ proc ::SafetyFactor::SetupContour {} {
     catch {clt SetDisplayOptions "contour" true}
     catch {clt SetDisplayOptions "legend"  true}
     clt Draw
+
+    # Post-apply sanity: binding 'null' means the contour still bound no data
+    set bind ""
+    catch {set bind [con GetBinding]}
+    puts "  contour binding   : '$bind'"
+    if {$bind eq "null" || $bind eq ""} {
+        puts "  WARNING: contour did not bind any data — the data-type label above is still wrong for this file"
+    }
 }
 
 # ─────────────────────────────────────────────────────────────────────
@@ -166,10 +191,11 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
     query SetDataSourceProperty result "Simulation Step" $SIMULATION
     # Real model ID of THIS window — not hardcoded 1
     query SetDataSourceProperty result "Model ID" $modelID
-    # NB: the original AVL-era script passed "1.  Endure_SF_A" (two spaces)
-    # here while the contour used one space. If the contour applies but the
-    # query returns no rows on an AVL file, re-check that spacing quirk.
-    query SetDataSourceProperty result "Result Type" $DATATYPE
+    # Use the RESOLVED label (exact string from GetDataTypeList, including
+    # its internal padding) — this is why the original AVL-era script needed
+    # the mysterious two-space "1.  Endure_SF_A" here.
+    variable RESOLVED_DT
+    query SetDataSourceProperty result "Result Type" $RESOLVED_DT
     query SetDataSourceProperty result "Load Case" $SUBCASE
     query SetDataSourceProperty result complex real
     query SetDataSourceProperty result complex_format real
