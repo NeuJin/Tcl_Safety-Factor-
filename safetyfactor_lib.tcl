@@ -56,17 +56,16 @@ proc ::SafetyFactor::SetupContour {} {
     set applied ""
     catch {set applied [con GetDataType]}
     if {$applied ne $DATATYPE} {
-        puts "  !!!! Data type '$DATATYPE' was NOT accepted (readback: '$applied')"
+        # Warning only — readback formatting can differ from the input label
+        # even when the type applied fine, so this must not abort the window.
+        puts "  NOTE: data type readback '$applied' != input '$DATATYPE'"
         set dtList ""
         if {[catch {set dtList [rctrl GetDataTypeList [rctrl GetCurrentSubcase]]}]} {
             catch {set dtList [rctrl GetDataTypeList]}
         }
         if {$dtList ne ""} {
-            puts "  Available data types in this file:"
-            foreach dt $dtList { puts "      '$dt'" }
-            puts "  -> copy the exact label into the panel's 'Data type' field and re-run."
+            puts "  Available data types: $dtList"
         }
-        error "invalid data type label '$DATATYPE'"
     }
 
     con SetDataComponent {Scalar value}
@@ -90,24 +89,38 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
         catch {${handle} ReleaseHandle}
     }
 
+    # ★ ACTIVATE the window first — the original (working) script always ran
+    # on [page GetActiveWindow]; querying contour.value on a never-activated
+    # window is the prime suspect for empty results in the window loop.
+    catch {$pageHandle SetActiveWindow $winIdx}
+
     # GetWindowHandle takes an INDEX 1..N (confirmed live), not an ID
     $pageHandle GetWindowHandle win $winIdx
     win GetClientHandle clt
-    clt GetModelHandle model [clt GetActiveModel]
+    set modelID [clt GetActiveModel]
+    clt GetModelHandle model $modelID
     model GetResultCtrlHandle rctrl
 
     puts ""
     puts "===================================================="
-    puts " Window $winIdx"
+    puts " Window $winIdx (model id $modelID)"
     puts "===================================================="
 
+    # Mirror the original handle set exactly (it worked single-window):
+    rctrl GetIsoValueCtrlHandle iso
+    rctrl GetResultMathCtrlHandle math
     model GetQueryCtrlHandle query
+    catch {iso SetAverageMode Simple}
+
     SetupContour
+    clt Draw
     set subLabel [rctrl GetSubcaseLabel $SUBCASE]
     puts "Load case: $subLabel"
+    catch {puts "Subcase list: [rctrl GetSubcaseList model]"}
 
     query SetDataSourceProperty result "Simulation Step" $SIMULATION
-    query SetDataSourceProperty result "Model ID" 1
+    # Real model ID of THIS window — not hardcoded 1
+    query SetDataSourceProperty result "Model ID" $modelID
     # NB: the original AVL-era script passed "1.  Endure_SF_A" (two spaces)
     # here while the contour used one space. If the contour applies but the
     # query returns no rows on an AVL file, re-check that spacing quirk.
@@ -119,6 +132,16 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
     query SetDataSourceProperty result dataformat csv
     query SetDataSourceProperty result datatype real
     query SetDataSourceProperty result layer all
+
+    # Primer pass — the original script always ran one WriteData before the
+    # per-set loop; keep it in case that's what materializes the query.
+    catch {
+        query SetSelectionSet [lindex $selectionSets 0]
+        query SetQuery "node.id contour.value"
+        set _primer [file join $::SafetyFactor::LIB_DIR "_sf_primer_tmp.csv"]
+        query WriteData $_primer csv
+        file delete -force $_primer
+    }
 
     foreach setID $selectionSets {
         if {[catch {model GetSelectionSetHandle setc $setID} err]} {
@@ -212,6 +235,7 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
         catch {${handle} ReleaseHandle}
     }
 
+    catch {$pageHandle SetActiveWindow $winIdx}
     $pageHandle GetWindowHandle win $winIdx
     win GetClientHandle clt
     clt GetModelHandle model [clt GetActiveModel]
