@@ -13,6 +13,9 @@ namespace eval ::SafetyFactor {
     variable NOTE_FSIZE  10                ;# summary note text size
     variable SHOW_NOTE   1                 ;# 1 = create the summary note header, 0 = marker only
     variable SHOW_LEGEND 1                 ;# legend on/off (ApplyDisplay)
+    variable LEGEND_TCL  ""                ;# optional legend TCL sourced per window
+                                            # during Annotate — capture styling ONLY,
+                                            # never touches the CSV or results table
     variable NOTE_WHITE  1                 ;# 1 = white filled note (left-aligned, bordered,
                                             #     leading-space text — white pad for the triad);
                                             # 0 = old transparent right-aligned style
@@ -539,6 +542,21 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
 
     # Make sure the window displays the SF contour on the right frame
     SetupContour
+
+    # Optional legend TCL — capture styling only. Sourced AFTER the CSV row
+    # was read, so it can never affect stored data or the results table.
+    variable LEGEND_TCL
+    if {$LEGEND_TCL ne ""} {
+        if {![file exists $LEGEND_TCL]} {
+            puts "  WARNING: legend TCL not found: $LEGEND_TCL"
+        } else {
+            if {[catch {uplevel #0 [list source $LEGEND_TCL]} _lerr]} {
+                puts "  WARNING: legend TCL failed: $_lerr"
+            } else {
+                puts "  legend TCL applied: [file tail $LEGEND_TCL]"
+            }
+        }
+    }
 
     # Remove this script's stale measures (re-runnable)
     set staleIDs {}
