@@ -573,7 +573,7 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
         # HV auto-trims leading whitespace on line 1 (the dot anchors the
         # indent), and every line is padded to the same column so all 3
         # lines align.
-        note SetText ".         $line1\n          Node ID: $nodeID\n          MIN: $sf3"
+        note SetText ".                  $line1\n                   Node ID: $nodeID\n                   MIN: $sf3"
         catch {note SetAlignment left}
         catch {note SetBorderThickness 1}
         catch {note SetTransparency false}
