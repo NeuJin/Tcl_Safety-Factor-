@@ -12,6 +12,9 @@ namespace eval ::SafetyFactor {
     variable MEA_FSIZE   15                ;# measure marker text size
     variable NOTE_FSIZE  10                ;# summary note text size
     variable SHOW_NOTE   1                 ;# 1 = create the summary note header, 0 = marker only
+    variable DATACOMP    "Scalar value"    ;# contour/query component
+    variable PRECISION   3                 ;# decimals for displayed values AND
+                                            # legend numeric precision (cap 10)
     variable DATATYPE    "1. Endure_SF_A"  ;# contour/query data type label —
                                             # MUST match the loaded result file
                                             # (AVL EXCITE: "1. Endure_SF_A";
@@ -22,6 +25,55 @@ namespace eval ::SafetyFactor {
     variable SIMULATION  0                 ;# simulation step index
     variable RESOLVED_DT ""                ;# DATATYPE resolved to the file's exact label (set by SetupContour)
     variable LIB_DIR     [file dirname [file normalize [info script]]]
+}
+
+# Format a value with the configured number of decimals (fallback 3)
+proc ::SafetyFactor::Fmt {v} {
+    variable PRECISION
+    set p $PRECISION
+    if {![string is integer -strict $p] || $p < 0 || $p > 10} { set p 3 }
+    if {[catch {set out [format "%.${p}f" $v]}]} { return $v }
+    return $out
+}
+
+# Data-type list of a window's model (for the panel droplist).
+proc ::SafetyFactor::FetchTypeList {{winIdx 1}} {
+    variable SUBCASE
+    CleanHandles
+    OpenChain
+    catch {page SetActiveWindow $winIdx}
+    page GetWindowHandle win $winIdx
+    win GetClientHandle clt
+    clt GetModelHandle model [clt GetActiveModel]
+    model GetResultCtrlHandle rctrl
+    catch {rctrl SetCurrentSubcase $SUBCASE}
+    set dts ""
+    if {[catch {set dts [rctrl GetDataTypeList [rctrl GetCurrentSubcase]]}]} {
+        catch {set dts [rctrl GetDataTypeList]}
+    }
+    catch {hwi CloseStack}
+    return $dts
+}
+
+# Component list for one data type (signature not documented — try variants).
+proc ::SafetyFactor::FetchComponentList {dt {winIdx 1}} {
+    variable SUBCASE
+    CleanHandles
+    OpenChain
+    catch {page SetActiveWindow $winIdx}
+    page GetWindowHandle win $winIdx
+    win GetClientHandle clt
+    clt GetModelHandle model [clt GetActiveModel]
+    model GetResultCtrlHandle rctrl
+    catch {rctrl SetCurrentSubcase $SUBCASE}
+    set comps ""
+    if {[catch {set comps [rctrl GetDataComponentList $dt]}]} {
+        if {[catch {set comps [rctrl GetDataComponentList [rctrl GetCurrentSubcase] $dt]}]} {
+            catch {set comps [rctrl GetDataComponentList $dt [rctrl GetCurrentSubcase]]}
+        }
+    }
+    catch {hwi CloseStack}
+    return $comps
 }
 
 # Print the model's REAL selection-set table (IDs from GetSelectionSetList —
@@ -118,11 +170,15 @@ proc ::SafetyFactor::SetupContour {} {
     puts "  data type resolved: '$RESOLVED_DT'"
     con SetDataType $RESOLVED_DT
 
-    con SetDataComponent {Scalar value}
+    variable DATACOMP
+    variable PRECISION
+    con SetDataComponent $DATACOMP
     con SetAverageMode none
     con SetCornerDataEnabled false
     con SetEnableState true
-    leg SetNumericPrecision 5
+    set _prec $PRECISION
+    if {![string is integer -strict $_prec] || $_prec < 0 || $_prec > 10} { set _prec 3 }
+    leg SetNumericPrecision $_prec
 
     # Materialize the contour — SetEnableState alone is NOT enough: without
     # the animator step-refresh + display options the model stays grey and
@@ -196,7 +252,9 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
     # its internal padding) — this is why the original AVL-era script needed
     # the mysterious two-space "1.  Endure_SF_A" here.
     variable RESOLVED_DT
+    variable DATACOMP
     query SetDataSourceProperty result "Result Type" $RESOLVED_DT
+    query SetDataSourceProperty result "Component" $DATACOMP
     query SetDataSourceProperty result "Load Case" $SUBCASE
     query SetDataSourceProperty result complex real
     query SetDataSourceProperty result complex_format real
@@ -342,9 +400,11 @@ proc ::SafetyFactor::QueryNodeValue {winIdx nodeID} {
         error "node $nodeID not found in window $winIdx's model"
     }
 
+    variable DATACOMP
     query SetDataSourceProperty result "Simulation Step" $SIMULATION
     query SetDataSourceProperty result "Model ID" $modelID
     query SetDataSourceProperty result "Result Type" $RESOLVED_DT
+    query SetDataSourceProperty result "Component" $DATACOMP
     query SetDataSourceProperty result "Load Case" $SUBCASE
     query SetDataSourceProperty result complex real
     query SetDataSourceProperty result complex_format real
@@ -500,7 +560,7 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
     clt GetNoteHandle note $nid            ;# handle NAME first, then id
     catch {note SetName  "MinSF_$setName"}
     catch {note SetLabel "MinSF_$setName"}
-    set sf3 [format "%.3f" $sfVal]
+    set sf3 [Fmt $sfVal]
     set line1 "SF: $setName"
     if {$lcLabel ne ""} { set line1 "SF: $lcLabel" }
     note SetText "$line1\nNode ID: $nodeID\nMin SF: $sf3"
