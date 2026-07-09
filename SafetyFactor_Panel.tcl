@@ -195,6 +195,8 @@ proc ::SFPanel::Build {} {
     grid $W.opt.lc    -row 2 -column 1 -sticky w -padx {4 0} -pady {4 0}
     grid $W.opt.l5    -row 3 -column 0 -sticky w -pady {4 0}
     grid $W.opt.dt    -row 3 -column 1 -columnspan 3 -sticky w -padx {4 0} -pady {4 0}
+    checkbutton $W.opt.shownote -text "Show note header" -variable ::SafetyFactor::SHOW_NOTE
+    grid $W.opt.shownote -row 4 -column 0 -columnspan 3 -sticky w -pady {4 0}
     pack $W.opt -fill x -padx 10 -pady 4
 
     # ── Results table (all windows) ──
