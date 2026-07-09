@@ -568,10 +568,12 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
     if {$lcLabel ne ""} { set line1 "SF: $lcLabel" }
     variable NOTE_WHITE
     if {$NOTE_WHITE} {
-        # White filled style — leading spaces pad the text off the border;
-        # the first line needs a "." before the space or HV auto-trims the
-        # leading whitespace and the indent is lost.
-        note SetText ". $line1\n Node ID: $nodeID\n Min SF: $sf3"
+        # White filled style. Big left padding leaves a white area for the
+        # axis triad to render on; the first line starts with "." because
+        # HV auto-trims leading whitespace on line 1 (the dot anchors the
+        # indent), and every line is padded to the same column so all 3
+        # lines align.
+        note SetText ".         $line1\n          Node ID: $nodeID\n          MIN: $sf3"
         catch {note SetAlignment left}
         catch {note SetBorderThickness 1}
         catch {note SetTransparency false}
@@ -583,7 +585,32 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
         catch {note SetTransparency true}
     }
     catch {note SetScreenAnchor true}
-    if {$cornerPos ne ""} {
+    if {$NOTE_WHITE} {
+        # Bottom-left placement (white pad sits under the triad) — sniff
+        # SetPosition's coordinate system from GetPosition: values <= 1
+        # treated as normalized (origin assumed top-left), larger as pixels.
+        set curPos ""
+        catch {set curPos [note GetPosition]}
+        set placed 0
+        if {[llength $curPos] >= 2} {
+            lassign $curPos px py
+            if {[string is double -strict $px] && [string is double -strict $py]} {
+                if {$px <= 1.0 && $py <= 1.0} {
+                    if {![catch {note SetPosition "0.02 0.97"}]} { set placed 1 }
+                } else {
+                    set gh ""
+                    catch {set gh [win GetGraphicsHeight]}
+                    if {$gh ne "" && ![catch {note SetPosition "10 [expr {int($gh) - 20}]"}]} {
+                        set placed 1
+                    }
+                }
+            }
+        }
+        set rb ""
+        catch {set rb [note GetPosition]}
+        puts "  note position: '$curPos' -> '$rb' (placed=$placed)"
+    } elseif {$cornerPos ne ""} {
+        # Old style: reuse the hidden built-in note's corner spot
         if {[catch {note SetPosition $cornerPos} err]} {
             puts "  WARNING: SetPosition '$cornerPos' failed: $err"
         }
