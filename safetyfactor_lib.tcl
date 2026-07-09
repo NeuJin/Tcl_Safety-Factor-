@@ -12,6 +12,7 @@ namespace eval ::SafetyFactor {
     variable MEA_FSIZE   15                ;# measure marker text size
     variable NOTE_FSIZE  10                ;# summary note text size
     variable SHOW_NOTE   1                 ;# 1 = create the summary note header, 0 = marker only
+    variable SHOW_LEGEND 1                 ;# legend on/off (ApplyDisplay)
     variable NOTE_WHITE  1                 ;# 1 = white filled note (left-aligned, bordered,
                                             #     leading-space text — white pad for the triad);
                                             # 0 = old transparent right-aligned style
@@ -203,6 +204,58 @@ proc ::SafetyFactor::SetupContour {} {
     if {$bind eq "null" || $bind eq ""} {
         puts "  WARNING: contour did not bind any data — the data-type label above is still wrong for this file"
     }
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# DISPLAY — legend on/off + element display mode, every window,
+# every component. meshMode: meshlines / features / none — the toolbar
+# "Shaded Elements [and Mesh/Feature Lines]" buttons = component
+# SetPolygonMode opaque + SetMeshMode (console-confirmed mapping).
+# ─────────────────────────────────────────────────────────────────────
+
+proc ::SafetyFactor::ApplyDisplay {legendOn meshMode} {
+    CleanHandles
+    OpenChain
+
+    set numWindows [page GetNumberOfWindows]
+    for {set wi 1} {$wi <= $numWindows} {incr wi} {
+        if {[catch {
+            foreach handle {win clt model rctrl con leg _comp0 _ch} {
+                catch {${handle} ReleaseHandle}
+            }
+            catch {page SetActiveWindow $wi}
+            page GetWindowHandle win $wi
+            win GetClientHandle clt
+            clt GetModelHandle model [clt GetActiveModel]
+
+            # Legend visibility (both the handle and the display option)
+            catch {
+                model GetResultCtrlHandle rctrl
+                rctrl GetContourCtrlHandle con
+                con GetLegendHandle leg
+                leg SetVisibility $legendOn
+            }
+            catch {clt SetDisplayOptions "legend" $legendOn}
+
+            # Element display on every component of the model
+            model GetComponentHandle _comp0 0
+            set _children [_comp0 GetChildrenList]
+            _comp0 ReleaseHandle
+            foreach cid $_children {
+                catch {
+                    model GetComponentHandle _ch $cid
+                    _ch SetPolygonMode opaque
+                    _ch SetMeshMode $meshMode
+                    _ch ReleaseHandle
+                }
+            }
+            clt Draw
+            puts "  window $wi: legend=$legendOn, mesh=$meshMode ([llength $_children] components)"
+        } err]} {
+            puts "!!!! Window $wi display apply failed: $err"
+        }
+    }
+    catch {hwi CloseStack}
 }
 
 # ─────────────────────────────────────────────────────────────────────
