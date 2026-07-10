@@ -662,6 +662,7 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
         catch {note SetBorderThickness 1}
         catch {note SetTransparency false}
         catch {note SetBackgroundColor "255 255 255"}
+        catch {note SetTextColor "0 0 0"}   ;# HV2022 defaults to white text
     } else {
         note SetText "$line1\nNode ID: $nodeID\nMin SF: $sf3"
         catch {note SetAlignment right}
