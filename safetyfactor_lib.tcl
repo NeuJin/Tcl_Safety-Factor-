@@ -694,14 +694,8 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
         }
     }
     set rb ""
-        catch {set rb [note GetPosition]}
-        puts "  note position: '$curPos' -> '$rb' (placed=$placed)"
-    } elseif {$cornerPos ne ""} {
-        # Old style: reuse the hidden built-in note's corner spot
-        if {[catch {note SetPosition $cornerPos} err]} {
-            puts "  WARNING: SetPosition '$cornerPos' failed: $err"
-        }
-    }
+    catch {set rb [note GetPosition]}
+    puts "  note position: '$curPos' -> '$rb' (placed=$placed)"
     if {![catch {note GetFontHandle nfont}]} {
         catch {nfont SetSize $noteSize}
         catch {nfont ReleaseHandle}
