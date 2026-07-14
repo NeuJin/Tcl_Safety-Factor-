@@ -16,9 +16,6 @@ namespace eval ::SafetyFactor {
     variable LEGEND_TCL  ""                ;# optional legend TCL sourced per window
                                             # during Annotate — capture styling ONLY,
                                             # never touches the CSV or results table
-    variable NOTE_WHITE  1                 ;# 1 = white filled note (left-aligned, bordered,
-                                            #     leading-space text — white pad for the triad);
-                                            # 0 = old transparent right-aligned style
     variable DATACOMP    "Scalar value"    ;# contour/query component
     variable PRECISION   3                 ;# decimals for displayed values AND
                                             # legend numeric precision (cap 10)
@@ -645,53 +642,40 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
     catch {note SetName  "MinSF_$setName"}
     catch {note SetLabel "MinSF_$setName"}
     set sf3 [Fmt $sfVal]
-    set line1 "SF: $setName"
-    if {$lcLabel ne ""} { set line1 "SF: $lcLabel" }
-    variable NOTE_WHITE
-    if {$NOTE_WHITE} {
-        # White filled style. Big left padding leaves a white area for the
-        # axis triad to render on; the first line starts with "." because
-        # HV auto-trims leading whitespace on line 1 (the dot anchors the
-        # indent), and every line is padded to the same column so all 3
-        # lines align.
-        # No load-case line: Node ID first, MIN second, and a bottom spacer
-        # row marked with "." at BOTH ends (leading dot anchors the indent,
-        # trailing dot stops HV trimming the whitespace between them).
-        note SetText ".                  Node ID: $nodeID\n                   MIN: $sf3\n.                                  ."
-        catch {note SetAlignment left}
-        catch {note SetBorderThickness 1}
-        catch {note SetTransparency false}
-        catch {note SetBackgroundColor "255 255 255"}
-        catch {note SetTextColor "0 0 0"}   ;# HV2022 defaults to white text
-    } else {
-        note SetText "$line1\nNode ID: $nodeID\nMin SF: $sf3"
-        catch {note SetAlignment right}
-        catch {note SetBorderThickness 0}
-        catch {note SetTransparency true}
-    }
+    # White filled style (the only style — merged with the old plain/
+    # transparent variant since white is what's actually used). No
+    # load-case line: Node ID first, MIN second, and a bottom spacer row
+    # marked with "." at BOTH ends (leading dot anchors the indent —
+    # HV auto-trims leading whitespace otherwise — trailing dot stops HV
+    # trimming the whitespace between them).
+    note SetText ".                  Node ID: $nodeID\n                   MIN: $sf3\n.                                  ."
+    catch {note SetAlignment left}
+    catch {note SetBorderThickness 1}
+    catch {note SetTransparency false}
+    catch {note SetBackgroundColor "255 255 255"}
+    catch {note SetTextColor "0 0 0"}   ;# HV2022 defaults to white text
     catch {note SetScreenAnchor true}
-    if {$NOTE_WHITE} {
-        # Bottom-left placement (white pad sits under the triad) — sniff
-        # SetPosition's coordinate system from GetPosition: values <= 1
-        # treated as normalized (origin assumed top-left), larger as pixels.
-        set curPos ""
-        catch {set curPos [note GetPosition]}
-        set placed 0
-        if {[llength $curPos] >= 2} {
-            lassign $curPos px py
-            if {[string is double -strict $px] && [string is double -strict $py]} {
-                if {$px <= 1.0 && $py <= 1.0} {
-                    if {![catch {note SetPosition "0.02 0.97"}]} { set placed 1 }
-                } else {
-                    set gh ""
-                    catch {set gh [win GetGraphicsHeight]}
-                    if {$gh ne "" && ![catch {note SetPosition "10 [expr {int($gh) - 20}]"}]} {
-                        set placed 1
-                    }
+    # Bottom-left placement (white pad sits under the triad) — sniff
+    # SetPosition's coordinate system from GetPosition: values <= 1
+    # treated as normalized (origin assumed top-left), larger as pixels.
+    set curPos ""
+    catch {set curPos [note GetPosition]}
+    set placed 0
+    if {[llength $curPos] >= 2} {
+        lassign $curPos px py
+        if {[string is double -strict $px] && [string is double -strict $py]} {
+            if {$px <= 1.0 && $py <= 1.0} {
+                if {![catch {note SetPosition "0.02 0.97"}]} { set placed 1 }
+            } else {
+                set gh ""
+                catch {set gh [win GetGraphicsHeight]}
+                if {$gh ne "" && ![catch {note SetPosition "10 [expr {int($gh) - 20}]"}]} {
+                    set placed 1
                 }
             }
         }
-        set rb ""
+    }
+    set rb ""
         catch {set rb [note GetPosition]}
         puts "  note position: '$curPos' -> '$rb' (placed=$placed)"
     } elseif {$cornerPos ne ""} {
