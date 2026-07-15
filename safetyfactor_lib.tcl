@@ -219,6 +219,11 @@ proc ::SafetyFactor::SetupContour {} {
 # ─────────────────────────────────────────────────────────────────────
 
 proc ::SafetyFactor::ApplyDisplay {legendOn meshMode} {
+    # ⚠️ HV wants the literal string "true"/"false" for leg SetVisibility —
+    # a Tk checkbutton's -variable holds "1"/"0" by default, which HV
+    # silently ignores (no error, legend just never toggles). Normalize.
+    set legendOn [expr {$legendOn ? "true" : "false"}]
+
     CleanHandles
     OpenChain
 
