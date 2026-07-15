@@ -662,11 +662,11 @@ proc ::SafetyFactor::annotateWindow {pageHandle winIdx setID csvRows pink meaSiz
     set sf3 [Fmt $sfVal]
     # White filled style (the only style — merged with the old plain/
     # transparent variant since white is what's actually used). No
-    # load-case line: Node ID first, MIN second, and a bottom spacer row
-    # marked with "." at BOTH ends (leading dot anchors the indent —
-    # HV auto-trims leading whitespace otherwise — trailing dot stops HV
-    # trimming the whitespace between them).
-    note SetText ".                  Node ID: $nodeID\n                   MIN: $sf3\n.                                  ."
+    # load-case line: Node ID first, MIN second, then a "---" closing row.
+    # Padding matches the Max Stress note (dot+22 on line 1 — HV auto-trims
+    # leading whitespace on the very first line otherwise — 23 spaces on
+    # the rest, so all lines line up in the same left column).
+    note SetText ".                      Node ID: $nodeID\n                       MIN: $sf3\n                       ---"
     catch {note SetAlignment left}
     catch {note SetBorderThickness 1}
     catch {note SetTransparency false}
