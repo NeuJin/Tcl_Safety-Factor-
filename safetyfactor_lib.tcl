@@ -131,6 +131,28 @@ proc ::SafetyFactor::OpenChain {} {
     proj GetPageHandle page [proj GetActivePage]
 }
 
+# ⚠️ 2026-07-16, HW 2025.1: right after a direct-ODB AddResult +
+# WaitForResults (LoadAll, shared with MaxStress), `rctrl
+# SetCurrentSubcase` can fail with "Cannot Set the Current Subcase or
+# Step as Scaling is not complete. Please re-apply." — an async
+# post-load computation WaitForResults doesn't cover. Mirrors
+# ::MaxStress::SetSubcaseWithRetry (duplicated rather than cross-called
+# since the two libs are independent namespaces, same convention as
+# ListSets/ResolveSet above). Assumes the caller already has `rctrl`
+# grabbed.
+proc ::SafetyFactor::SetSubcaseWithRetry {sc simIdx {maxTries 15} {waitMs 400}} {
+    set lastErr ""
+    for {set i 0} {$i < $maxTries} {incr i} {
+        if {![catch {rctrl SetCurrentSubcase $sc} lastErr]} {
+            catch {rctrl SetCurrentSimulation $simIdx}
+            return 1
+        }
+        after $waitMs
+        catch {update}
+    }
+    error "SetCurrentSubcase $sc failed after $maxTries tries ($waitMs ms apart): $lastErr"
+}
+
 # Sets the SF contour + current frame on the already-grabbed window handles.
 # HyperView SILENTLY ignores an unknown data-type label (no error, contour
 # just stays grey) — so read the label back and, on mismatch, print the
@@ -146,8 +168,7 @@ proc ::SafetyFactor::SetupContour {} {
 
     variable RESOLVED_DT
 
-    rctrl SetCurrentSubcase $SUBCASE
-    rctrl SetCurrentSimulation $SIMULATION
+    SetSubcaseWithRetry $SUBCASE $SIMULATION
 
     # ★ Resolve DATATYPE against the file's ACTUAL data-type list. The real
     # labels carry internal padding (e.g. "1.  Endure_SF_A" with TWO spaces,
@@ -366,6 +387,13 @@ proc ::SafetyFactor::processWindow {pageHandle winIdx selectionSets summaryRowsV
             set data [iter GetDataList]
             set nodeID [lindex $data 0]
             set sfVal [lindex $data 1]
+            # ⚠️ Same "N/A" gotcha as MaxStress's sweep (2026-07-16, HW
+            # 2025.1): a node with no valid result at this frame reads
+            # back the literal string "N/A", not empty — comparing that
+            # with < throws a Tcl error and would kill this whole set's
+            # row (and any sets after it, since the enclosing catch in
+            # RunExport is per-window, not per-set). Skip just this node.
+            if {![string is double -strict $sfVal]} { continue }
             if {$sfVal < $minSF} {
                 set minSF $sfVal
                 set minNodeID $nodeID
@@ -668,11 +696,17 @@ proc ::SafetyFactor::QueryNodeValue {winIdx nodeID} {
     query SetQuery "node.id contour.value"
     query GetQuery
 
+    # ⚠️ Same "N/A" gotcha as MaxStress's QueryNodeValue (2026-07-16, HW
+    # 2025.1): a node with no valid result at this frame reads back the
+    # literal string "N/A", not empty — accepting it unguarded would
+    # silently report a fake "N/A" value instead of raising the "no
+    # contour value" error below.
     set val ""
     query GetIteratorHandle iter
     for {iter First} {[iter Valid]} {iter Next} {
         set data [iter GetDataList]
-        if {[lindex $data 1] ne ""} { set val [lindex $data 1] }
+        set _v [lindex $data 1]
+        if {$_v ne "" && [string is double -strict $_v]} { set val $_v }
     }
     iter ReleaseHandle
     catch {model RemoveSelectionSet $tid}
